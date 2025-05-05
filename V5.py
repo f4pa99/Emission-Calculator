@@ -5,6 +5,10 @@
 import os # for clearing the terminal
 import time # for adding pauses
 
+import openai #For Chat GPT input
+from openai import OpenAI #For Chat GPT input
+import json #For Chat GPT input
+
 # %% [markdown]
 # Welcome Message
 
@@ -175,6 +179,83 @@ def show_player_names():
     input()
 
 # %% [markdown]
+# Function: Chat GPT Input
+
+# %% [markdown]
+# Chat GPT API Key Best Practice: Enviromental Key
+# Source: https://help.openai.com/en/articles/5112595-best-practices-for-api-key-safety
+
+# %%
+openai.api_key = os.environ["OPENAI_API_KEY"]
+client = OpenAI()
+
+# Define the system prompt
+system_prompt = """
+You are a transportation emissions assistant. The user will describe a trip in natural language.
+
+Your task:
+1. Choose the closest matching transport mode from this list ONLY:
+   ["car", "train", "plane"]
+2. Convert any distance to kilometers (km). If the user says miles, convert using 1 mile = 1.60934 km.
+3. Return ONLY the following JSON format:
+
+{
+  "transport_mode": "<car, train, or plane>",
+  "distance": <distance in km, numeric>
+}
+
+If anything is unclear or missing, use null for that value.
+Only respond with the JSON. No other text.
+"""
+
+def get_trip_from_chatgpt():
+    user_input = input("\n📝 Describe your trip (e.g., 'I flew 300 miles to Madrid'): ")
+    try:
+        completion = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_input}
+            ]
+        )
+        response = completion.choices[0].message.content.strip()
+        parsed = json.loads(response)
+
+        mode = parsed.get("transport_mode")
+        distance = parsed.get("distance")
+
+        if not mode or distance is None:
+            print("\n Could not understand the trip details. Please try again.")
+            input("\nPress Enter to return to the menu...")
+            return
+
+        factor = emission_factors.get(mode)
+        if not factor:
+            print(f"\n Mode '{mode}' is not supported.")
+            input("\nPress Enter to return to the menu...")
+            return
+
+        emissions = round(factor * distance, 2)
+        print(f"\n✅ Estimated CO2 emissions: {emissions} kg")
+
+        save = input("\nDo you want to save this result? (y/n): ").strip().lower()
+        if save == 'y':
+            name = input("Enter your first name: ").strip().lower()
+            database.append({
+                "name": name,
+                "emissions": emissions,
+                "mode": mode,
+                "distance": distance
+            })
+            print("Result saved!")
+
+        input("\nPress Enter to return to the menu...")
+
+    except Exception as e:
+        print("\n❌ An error occurred:", e)
+        input("\nPress Enter to return to the menu...")
+
+# %% [markdown]
 # Function: Clear Outputs
 
 # %%
@@ -193,8 +274,9 @@ def show_menu():
     print("2. Show leaderboard")
     print("3. Show all player names")
     print("4. Show all trip history")
-    print("5. Exit")
-    return input("Choose an option (1/2/3/4/5): ").strip()
+    print("5. BETA:Calculate a new trip via ChatGPT")
+    print("6. Exit")
+    return input("Choose an option by typing the number: ").strip()
 
 # %% [markdown]
 # Main Program
@@ -218,8 +300,11 @@ def main():
 
         elif choice == '4':
             show_history()
-            
+        
         elif choice == '5':
+            get_trip_from_chatgpt()
+            
+        elif choice == '6':
             print("\nGoodbye!")
             break
         else:
